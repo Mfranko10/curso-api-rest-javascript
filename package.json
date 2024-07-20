@@ -1,0 +1,14 @@
+{
+  "name": "curso-api-rest-javascript",
+  "version": "1.0.0",
+  "description": "Curso práctico de Js y Api rest",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "Javascript"
+  ],
+  "author": "Miguel Franco <mianfraru@gmail.com>",
+  "license": "MIT"
+}
