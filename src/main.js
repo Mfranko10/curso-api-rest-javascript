@@ -1,3 +1,5 @@
+// Data
+
 const api = axios.create({
     baseURL: 'https://api.themoviedb.org/3/',
     headers: {
@@ -8,30 +10,95 @@ const api = axios.create({
     }
 })
 
+function likedMoviesList(){
+    const item = JSON.parse(localStorage.getItem('liked_movies'));
+    let movies;
+
+    if(item){
+        movies = item;
+    }else {
+        movies = {}
+    }
+    return movies;
+}
+
+function likeMovie(movie){
+    const likedMovies = likedMoviesList();
+
+    if(likedMovies[movie.id]){
+        likedMovies[movie.id] = undefined;
+    }else{
+        likedMovies[movie.id] = movie;
+    }
+
+    localStorage.setItem('liked_movies', JSON.stringify(likedMovies));
+}
+
 //Utils
 
-function createMovies(movies, container){
-    container.innerHTML =  '';
+const lazyLoader = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+            const url = entry.target.getAttribute('data-img');
+            entry.target.setAttribute('src', url);
+        }
+    })
+});
+
+function createMovies(
+    movies,
+    container,
+    {
+        lazyLoad = false,
+        clean = true,
+    }
+) {
+
+    if (clean) {
+        container.innerHTML = '';
+    }
 
     movies.forEach(movie => {
 
         const movieContainer = document.createElement('div');
         movieContainer.classList.add('movie-container');
-        movieContainer.addEventListener('click', () => {
-            location.hash = `#movie=${movie.id}`
-        });
+
 
         const movieImg = document.createElement('img');
         movieImg.classList.add('movie-img');
         movieImg.setAttribute('alt', movie.title);
-        movieImg.setAttribute('src', 'https://image.tmdb.org/t/p/w300' + movie.poster_path);
+        movieImg.setAttribute(
+            lazyLoad ? 'data-img' : 'src',
+            'https://image.tmdb.org/t/p/w300' + movie.poster_path);
+        movieImg.addEventListener('click', () => {
+            location.hash = `#movie=${movie.id}`
+        });
+        movieImg.addEventListener('error', () => {
+            movieImg.setAttribute(
+                'src',
+                'https://img.freepik.com/foto-gratis/fondo-abstracto-textura_1258-30633.jpg?w=740&t=st=1722187200~exp=1722187800~hmac=543d5a83ba4b622bf5f7dde621c00fb011e9e9be90c899dbeef257579a2abf89ñ'
+            )
+        })
+
+        const movieBtn = document.createElement('button');
+        movieBtn.classList.add('movie-btn');
+        likedMoviesList()[movie.id] && movieBtn.classList.add('movie-btn--liked')
+        movieBtn.addEventListener('click', () => {
+            movieBtn.classList.toggle('movie-btn--liked');
+            likeMovie(movie);
+        })
+
+        if (lazyLoad) {
+            lazyLoader.observe(movieImg);
+        }
 
         movieContainer.appendChild(movieImg);
+        movieContainer.appendChild(movieBtn);
         container.appendChild(movieContainer);
     });
-} 
+}
 
-function createCategories(categories, container){
+function createCategories(categories, container) {
     container.innerHTML = '';
 
     categories.forEach(category => {
@@ -54,38 +121,87 @@ function createCategories(categories, container){
 
     });
 }
+
+
 //Llamados a la API
 
-async function getTrendingMoviesPreview(){
-    const {data} = await api('trending/movie/day');
+async function getTrendingMoviesPreview() {
+    const { data } = await api('trending/movie/day');
     const movies = data.results;
 
-    createMovies(movies, trendingMoviesPreviewList);
+    createMovies(
+        movies,
+        trendingMoviesPreviewList,
+        {
+            lazyLoad: true,
+            clean: true,
+        }
+    );
 }
 
-async function getCategoriesPreview(){
-    const {data} = await api('genre/movie/list');
+async function getCategoriesPreview() {
+    const { data } = await api('genre/movie/list');
     const categories = data.genres;
 
     createCategories(categories, categoriesPreviewList);
 
-    
+
 }
 
-async function getMovieByCategory(id){
-    const {data} = await api('discover/movie', {
+async function getMovieByCategory(id) {
+    const { data } = await api('discover/movie', {
         params: {
             with_genres: id,
         }
     });
     const movies = data.results;
+    maxPage = data.total_pages;
+
 
     genericSection.innerHTML = '';
 
-    createMovies(movies, genericSection);
+    createMovies(
+        movies,
+        genericSection,
+        {
+            lazyLoad: true,
+            clean: true,
+        }
+    );
 }
 
-async function getMovieBySearch(query){
+function getPaginatedMoviesByCategory(id) {
+    return async function () {
+        const {
+            scrollTop,
+            scrollHeight,
+            clientHeight,
+        } = document.documentElement;
+
+        const scrollIsBottom = (scrollTop + clientHeight) >= (scrollHeight - 15);
+        const pageIsNotMax = page < maxPage
+
+        if (scrollIsBottom && pageIsNotMax) {
+            page++;
+            const { data } = await api('discover/movie', {
+                params: {
+                    with_genres: id,
+                    page,
+                }
+            });
+
+            const movies = data.results;
+            createMovies(movies,
+                genericSection,
+                {
+                    lazyLoad: true,
+                    clean: false,
+                });
+        }
+    }
+}
+
+async function getMovieBySearch(query) {
     const { data } = await api('search/movie', {
         params: {
             query,
@@ -93,19 +209,94 @@ async function getMovieBySearch(query){
     });
 
     const movies = data.results;
+    maxPage = data.total_pages;
 
-    createMovies(movies, genericSection);
+    createMovies(
+        movies,
+        genericSection,
+        {
+            lazyLoad: true,
+            clean: true,
+        }
+    );
 }
 
-async function getTrendingMovies(){
-    const {data} = await api('trending/movie/day');
+function getPaginatedMoviesBySearch(query) {
+    return async function () {
+        const {
+            scrollTop,
+            scrollHeight,
+            clientHeight,
+        } = document.documentElement;
+
+        const scrollIsBottom = (scrollTop + clientHeight) >= (scrollHeight - 15);
+        const pageIsNotMax = page < maxPage
+
+        if (scrollIsBottom && pageIsNotMax) {
+            page++;
+            const { data } = await api('search/movie', {
+                params: {
+                    query,
+                    page,
+                }
+            });
+
+            const movies = data.results;
+            createMovies(movies,
+                genericSection,
+                {
+                    lazyLoad: true,
+                    clean: false,
+                });
+        }
+    }
+}
+
+async function getTrendingMovies() {
+    const { data } = await api('trending/movie/day');
     const movies = data.results;
+    maxPage = data.total_pages
 
-    createMovies(movies, genericSection);
+    createMovies(
+        movies,
+        genericSection,
+        {
+            lazyLoad: true,
+            clean: true,
+        }
+    );
+
 }
 
-async function getMovieById(id){
-    const {data: movie} = await api('movie/' + id);
+async function getPaginatedTrendingMovies() {
+    const {
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+    } = document.documentElement;
+
+    const scrollIsBottom = (scrollTop + clientHeight) >= (scrollHeight - 15);
+    const pageIsNotMax = page < maxPage
+
+    if (scrollIsBottom && pageIsNotMax) {
+        page++;
+        const { data } = await api('trending/movie/day', {
+            params: {
+                page,
+            }
+        });
+        const movies = data.results;
+        createMovies(movies,
+            genericSection,
+            {
+                lazyLoad: true,
+                clean: false,
+            });
+    }
+}
+
+async function getMovieById(id) {
+    const { data: movie } = await api('movie/' + id);
 
     const movieImgUrl = 'https://image.tmdb.org/t/p/w500' + movie.poster_path;
     headerSection.style.background = `
@@ -121,7 +312,7 @@ async function getMovieById(id){
     movieDetailDescription.textContent = movie.overview;
     movieDetailScore.textContent = movie.vote_average;
 
-    createCategories(movie.genres, movieDetailCategoriesList);
+    createCategories(movie.genres, movieDetailCategoriesList, true);
 
     getRelatedMovieId(id);
 }
@@ -130,5 +321,26 @@ async function getRelatedMovieId(id) {
     const { data } = await api(`movie/${id}/recommendations`)
     const relatedMovies = data.results;
 
-    createMovies(relatedMovies, relatedMoviesContainer);
+    createMovies(
+        relatedMovies,
+        relatedMoviesContainer,
+        {
+            lazyLoad: true,
+            clean: true,
+        }
+    );
+}
+
+function getLikedMovies() {
+    const likedMovies = likedMoviesList();
+    const moviesArray = Object.values(likedMovies);
+
+    createMovies(
+    moviesArray,
+    likedMoviesListArticle,
+    {
+        lazyLoad: true,
+        clean: true,
+    }
+    )
 }
